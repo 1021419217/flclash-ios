@@ -87,6 +87,15 @@ class GoBuilder {
               replaceFile(stagedHeader, header);
               outputs.add(header);
             }
+            // The generated header re-includes bride.h, and quoted includes
+            // resolve against the header's own directory, so the C shim has to
+            // sit next to it for the Xcode targets to compile.
+            final brideHeader = p.join(_corePath, 'cmd', 'ios', 'bride.h');
+            if (File(brideHeader).existsSync()) {
+              final shim = p.join(outDir, 'bride.h');
+              File(brideHeader).copySync(shim);
+              outputs.add(shim);
+            }
           }
 
           _log.info('Built: $outFile');
