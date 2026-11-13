@@ -25,6 +25,9 @@ final class TunnelCoordinator {
   // A start that supersedes a stop before it stopped anything must still
   // cycle the tunnel, or a restart meant to apply new options is lost.
   private var restartOwed = false
+  // Why the last start gave up, so the Flutter side can say something better
+  // than "the tunnel did not start" when the system refuses it.
+  private(set) var lastFailureDescription: String?
 
   private var configurationContinuations: [CheckedContinuation<Void, Error>] = []
   private var needsStatusRefresh = false
@@ -56,6 +59,8 @@ final class TunnelCoordinator {
 
     if target == .stopped {
       restartOwed = true
+    } else {
+      lastFailureDescription = nil
     }
     requestGeneration &+= 1
     let request = TunnelRequest(
@@ -213,6 +218,7 @@ final class TunnelCoordinator {
         log(
           "\(request.target.description) failed: \(error.localizedDescription)"
         )
+        lastFailureDescription = error.localizedDescription
         finishTunnelRequest(
           request,
           actualState: stableFailureState(status)

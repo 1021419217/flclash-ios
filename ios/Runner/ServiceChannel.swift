@@ -177,14 +177,23 @@ final class ServiceChannel {
       // state blob means the last synced one still applies.
       if let state = call.arguments as? FlutterStandardTypedData {
         guard sharedStateStore.saveSharedState(state.data) else {
-          result(false)
+          result("共享状态同步失败，无法启动隧道。")
           return
         }
       } else {
         log("start without shared state; reusing the last synced one")
       }
-      tunnelController.start()
-      result(true)
+      Task {
+        // Wait for the system to report the tunnel connected. Reporting success
+        // straight away left the app claiming it was running while traffic went
+        // out unproxied, which is what a second VPN being active used to look
+        // like.
+        let failure = await tunnelController.startAndConfirm()
+        if let failure {
+          log("start failed: \(failure)")
+        }
+        result(failure ?? "")
+      }
     case "stop":
       tunnelController.stop()
       result(true)

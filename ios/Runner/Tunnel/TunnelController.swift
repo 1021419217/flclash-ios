@@ -80,6 +80,67 @@ final class TunnelController {
     coordinator.submitTunnelRequest(target: .running)
   }
 
+  /// Starts the tunnel and waits until the system reports it connected.
+  ///
+  /// The Flutter side treats a successful start as "the core is running" and
+  /// starts its uptime clock, so answering before the network extension is up
+  /// makes the app look connected while every packet still goes out unproxied.
+  /// Returns nil on success, or a message describing why it gave up.
+  func startAndConfirm(timeout: TimeInterval = 25) async -> String? {
+    coordinator.submitTunnelRequest(target: .running)
+    let deadline = Date().addingTimeInterval(timeout)
+    var sawProgress = false
+    while Date() < deadline {
+      if await isCoreActive() {
+        return nil
+      }
+      do {
+        if let manager = try await managerStore.loadManager(
+          createIfNeeded: false
+        ) {
+          let status = manager.connection.status
+          if status == .connecting || status == .reasserting {
+            sawProgress = true
+          }
+          if status == .invalid {
+            // A configuration the system rejects never reaches connecting.
+            return startFailure(
+              detail: coordinator.lastFailureDescription
+                ?? "the tunnel configuration was rejected"
+            )
+          }
+          if status == .disconnected {
+            if let failure = coordinator.lastFailureDescription {
+              return startFailure(detail: failure)
+            }
+            if sawProgress {
+              return startFailure(
+                detail: "the tunnel stopped before it connected"
+              )
+            }
+          }
+        }
+      } catch {
+        log("start poll failed: \(error.localizedDescription)")
+      }
+      try? await Task.sleep(nanoseconds: 250_000_000)
+    }
+    return startFailure(
+      detail: coordinator.lastFailureDescription
+        ?? "timed out waiting for the tunnel"
+    )
+  }
+
+  private func startFailure(detail: String) -> String {
+    let lower = detail.lowercased()
+    if lower.contains("already") || lower.contains("another")
+      || lower.contains("active") || lower.contains("in use")
+    {
+      return "另一个 VPN 正在运行，请先断开（例如 Surge）再启动 FlClash。"
+    }
+    return "网络扩展未能启动：\(detail)"
+  }
+
   func publishConnectionState() {
     coordinator.publishConnectionState()
     coordinator.requestStatusRefresh(notifyExternal: false)

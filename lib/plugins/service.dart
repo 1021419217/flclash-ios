@@ -77,6 +77,10 @@ class Service {
           _startRequested = false;
           _dispatch('stop report', (listener) => listener.onServiceStopped());
           break;
+        case 'tunnelState':
+          // iOS mirrors the network extension status here; the start reply and
+          // the stopped report already carry everything the UI acts on.
+          break;
         default:
           throw MissingPluginException();
       }
@@ -115,11 +119,18 @@ class Service {
 
   Future<bool> start() async {
     _startRequested = true;
-    return await methodChannel.invokeMethod<bool>(
+    final failure = await methodChannel.invokeMethod<String>(
           'start',
           ++_commandRevision,
         ) ??
-        false;
+        '';
+    if (failure.isEmpty) {
+      return true;
+    }
+    // iOS answers once the network extension is really connected, so a message
+    // here means it never came up and the run must not be reported as started.
+    _startRequested = false;
+    throw CoreMethodException(code: 'service_refused', message: failure);
   }
 
   Future<bool> stop() async {
