@@ -88,6 +88,29 @@ jobs:
           LIBCLANG_PATH: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib
         run: dart setup.dart ios --no-codesign -v
 
+      # TrollStore keeps whatever entitlements the binaries already carry, and
+      # this build starts with none, so the tunnel would come up without
+      # NetworkExtension rights. ldid writes them in before the IPA is packed.
+      - name: Fakesign entitlements
+        if: success()
+        run: |
+          if ! command -v ldid >/dev/null 2>&1; then
+            brew install ldid
+          fi
+          chmod +x scripts/sign_ios.sh
+          ./scripts/sign_ios.sh dist/FlClash.ipa
+
+      - name: Verify entitlements
+        if: success()
+        run: |
+          rm -rf /tmp/verify && mkdir -p /tmp/verify
+          unzip -q dist/FlClash.ipa -d /tmp/verify
+          app=/tmp/verify/Payload/Runner.app
+          for bin in "$app/Runner" "$app/PlugIns/NECore.appex/NECore"; do
+            echo "== $bin"
+            ldid -e "$bin"
+          done
+
       - name: Show output
         if: always()
         run: |
