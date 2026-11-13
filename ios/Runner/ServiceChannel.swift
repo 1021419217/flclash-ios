@@ -39,6 +39,9 @@ final class ServiceChannel {
   // layer was ported over and every call started raising MissingPluginException.
   private static let channelPrefix = "com.follow.clash"
   private let channel: FlutterMethodChannel
+  // Dart routes core calls to `<prefix>/core` while the service lifecycle uses
+  // `<prefix>/service`; both land on the same handler.
+  private let coreChannel: FlutterMethodChannel
   private let tileChannel: FlutterMethodChannel
   private let sharedStateStore: SharedStateStore
   private let tunnelController: TunnelController
@@ -87,6 +90,10 @@ final class ServiceChannel {
       name: "\(Self.channelPrefix)/tile",
       binaryMessenger: messenger
     )
+    let coreChannel = FlutterMethodChannel(
+      name: "\(Self.channelPrefix)/core",
+      binaryMessenger: messenger
+    )
     let sharedStateStore = SharedStateStore()
     let routerReference = CoreMessageRouterReference()
     let tunnelController = TunnelController(
@@ -124,6 +131,7 @@ final class ServiceChannel {
     )
 
     self.channel = channel
+    self.coreChannel = coreChannel
     self.tileChannel = tileChannel
     self.sharedStateStore = sharedStateStore
     self.tunnelController = tunnelController
@@ -131,6 +139,13 @@ final class ServiceChannel {
     self.coreEventRelay = coreEventRelay
 
     channel.setMethodCallHandler { [weak self] call, result in
+      guard let self else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      self.handle(call, result: result)
+    }
+    coreChannel.setMethodCallHandler { [weak self] call, result in
       guard let self else {
         result(FlutterMethodNotImplemented)
         return
