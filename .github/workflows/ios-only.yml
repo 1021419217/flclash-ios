@@ -82,6 +82,10 @@ jobs:
           echo "$CA_BUNDLE_SHA256  $bundle" | sha256sum -c -
 
       - name: Build IPA
+        env:
+          # rquickjs generates its iOS bindings at build time; bindgen needs a
+          # libclang and the Xcode toolchain copy is the one that matches the SDK.
+          LIBCLANG_PATH: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib
         run: dart setup.dart ios --no-codesign -v
 
       - name: Show output
