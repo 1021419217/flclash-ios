@@ -165,7 +165,11 @@ final class ServiceChannel {
         return
       }
       Task {
-        result(await coreMessageRouter.invoke(data))
+        // Dart asks for Uint8List here and decodes the JSON itself; handing back
+        // the raw String trips "type 'String' is not a subtype of type
+        // 'Uint8List?'" on every core call.
+        let response = await coreMessageRouter.invoke(data)
+        result(FlutterStandardTypedData(bytes: Data(response.utf8)))
       }
     case "start":
       // The Flutter side syncs the shared state before it starts the tunnel and
