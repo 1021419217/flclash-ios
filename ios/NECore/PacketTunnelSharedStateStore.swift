@@ -132,10 +132,16 @@ struct PacketTunnelVPNOptions: Decodable {
     ipv6 = try container.decode(Bool.self, forKey: .ipv6)
     // The Flutter layer calls this dnsHijacking; older payloads used
     // captureDns. Neither is worth failing the whole snapshot over.
-    captureDns =
-      (try container.decodeIfPresent(Bool.self, forKey: .captureDns))
-      ?? (try container.decodeIfPresent(Bool.self, forKey: .dnsHijacking))
-      ?? false
+    if let value = try container.decodeIfPresent(Bool.self, forKey: .captureDns) {
+      captureDns = value
+    } else if let value = try container.decodeIfPresent(
+      Bool.self,
+      forKey: .dnsHijacking
+    ) {
+      captureDns = value
+    } else {
+      captureDns = false
+    }
     systemProxy = try container.decode(Bool.self, forKey: .systemProxy)
     bypassDomain = try container.decodeIfPresent(
       [String].self,
