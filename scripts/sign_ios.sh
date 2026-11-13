@@ -4,8 +4,9 @@
 # `flutter build ios --no-codesign` leaves every binary without an
 # __entitlements section, so a TrollStore install has nothing to preserve and
 # the packet tunnel comes up without NetworkExtension rights: the app opens,
-# the switch flips, and nothing happens. ldid writes the entitlements into the
-# Mach-O; TrollStore keeps them when it resigns with its fake root.
+# the switch flips, and nothing happens. An ad-hoc codesign writes the
+# entitlements into the Mach-O; TrollStore keeps them when it resigns with its
+# fake root.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -26,24 +27,48 @@ APP="$WORK/Payload/Runner.app"
 BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
 echo "bundle id: $BUNDLE_ID"
 
-sign() {
-  local binary="$1" template="$2"
-  [ -f "$binary" ] || return 0
-  local ent="$WORK/ent.plist"
-  sed "s/\$(APP_BUNDLE_ID)/$BUNDLE_ID/g" "$template" > "$ent"
-  ldid -S"$ent" "$binary"
+sign_with_entitlements() {
+  local binary="$1" template="$2" label="$3"
+  [ -f "$binary" ] || {
+    echo "missing binary for $label: $binary" >&2
+    exit 1
+  }
+  [ -f "$template" ] || {
+    echo "missing entitlements template for $label: $template" >&2
+    exit 1
+  }
+  local ent="$WORK/ent-$label.plist"
+  sed "s/\$(APP_BUNDLE_ID)/$BUNDLE_ID/g" "$template" >"$ent"
+  /usr/bin/codesign --force --sign - --timestamp=none --entitlements "$ent" "$binary"
+  local keys
+  keys=$(/usr/bin/codesign -d --entitlements - --xml "$binary" 2>/dev/null | grep -c '<key>' || true)
+  echo "signed $label: $keys entitlement keys"
+  if [ "$keys" -eq 0 ]; then
+    echo "no entitlements written to $label" >&2
+    exit 1
+  fi
 }
 
-sign "$APP/Runner" "$ROOT/ios/Runner/Runner.entitlements"
-sign "$APP/PlugIns/NECore.appex/NECore" "$ROOT/ios/NECore/NECore.entitlements"
-sign "$APP/PlugIns/Widget.appex/Widget" "$ROOT/ios/Widget/Widget.entitlements"
-
-# Nested frameworks are loaded individually, so each one needs a signature too.
+# Nested code is signed first: signing an outer bundle seals its contents, so a
+# later change inside would invalidate it.
 while IFS= read -r -d '' candidate; do
   if file -b "$candidate" | grep -q 'Mach-O'; then
-    ldid -S "$candidate"
+    /usr/bin/codesign --force --sign - --timestamp=none "$candidate"
   fi
-done < <(find "$APP/Frameworks" "$APP/PlugIns" -type f -perm -111 -print0 2>/dev/null)
+done < <(find "$APP/Frameworks" -type f -perm -111 -print0 2>/dev/null)
+
+sign_with_entitlements \
+  "$APP/PlugIns/NECore.appex/NECore" \
+  "$ROOT/ios/NECore/NECore.entitlements" \
+  "NECore"
+sign_with_entitlements \
+  "$APP/PlugIns/Widget.appex/Widget" \
+  "$ROOT/ios/Widget/Widget.entitlements" \
+  "Widget"
+sign_with_entitlements \
+  "$APP/Runner" \
+  "$ROOT/ios/Runner/Runner.entitlements" \
+  "Runner"
 
 # Pack beside the original and move it into place only once zip succeeded, so a
 # failed repack never leaves the runner without a package.

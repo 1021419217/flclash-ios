@@ -111,7 +111,9 @@ jobs:
           app=/tmp/verify/Payload/Runner.app
           for bin in "$app/Runner" "$app/PlugIns/NECore.appex/NECore"; do
             echo "== $bin"
-            ldid -e "$bin"
+            /usr/bin/codesign -d --entitlements - --xml "$bin"
+            /usr/bin/codesign -d --entitlements - --xml "$bin" 2>/dev/null \
+              | grep -q packet-tunnel-provider
           done
 
       - name: Show output
