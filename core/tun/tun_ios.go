@@ -28,6 +28,9 @@ type iosOptions struct {
 	EndpointIndependentNAT bool   `json:"endpointIndependentNat"`
 }
 
+// maxIOSMtu keeps the tun under the phone's own link MTU.
+const maxIOSMtu = 1500
+
 // Start takes ownership of fd. iOS hands over the utun descriptor opened by
 // the PacketTunnelProvider; routes and addresses are configured by the
 // extension itself, so the core must not try to own them (AutoRoute stays
@@ -71,9 +74,13 @@ func Start(fd int, stack, address, dns, rawOptions string) *sing_tun.Listener {
 		}
 	}
 
+	// Only gvisor is proven under the iOS sandbox. The system stack wants a
+	// routing table the extension cannot own, mixed builds on system, and
+	// mips has never run on this platform; any of them leaves the tunnel up
+	// while nothing moves.
 	tunStack, ok := constant.StackTypeMapping[strings.ToLower(stack)]
-	if !ok {
-		tunStack = constant.TunMips
+	if !ok || tunStack != constant.TunGvisor {
+		tunStack = constant.TunGvisor
 	}
 
 	var dnsHijack []string
@@ -85,18 +92,30 @@ func Start(fd int, stack, address, dns, rawOptions string) *sing_tun.Listener {
 		dnsHijack = append(dnsHijack, net.JoinHostPort(d, "53"))
 	}
 
+	// 9000 is the Android default, where the tun is a plain virtual device.
+	// On a phone the real link is 1500, and segments over it stall every page
+	// while DNS and the handshakes still get through.
+	mtu := settings.MTU
+	if mtu == 0 || mtu > maxIOSMtu {
+		mtu = maxIOSMtu
+	}
+
 	options := LC.Tun{
-		Enable:                 true,
-		Device:                 "FlClash",
-		Stack:                  tunStack,
-		RecvMsgX:               settings.RecvMsgX,
-		SendMsgX:               settings.SendMsgX,
-		DNSHijack:              dnsHijack,
-		AutoRoute:              false,
+		Enable:    true,
+		Device:    "FlClash",
+		Stack:     tunStack,
+		RecvMsgX:  settings.RecvMsgX,
+		SendMsgX:  settings.SendMsgX,
+		DNSHijack: dnsHijack,
+		AutoRoute: false,
+		// The extension's own sockets already sit outside the tunnel it
+		// creates, so there is nothing to bind around; asking for an
+		// interface monitor would only add a route socket this sandbox may
+		// refuse, and the tun would never come up.
 		AutoDetectInterface:    false,
 		Inet4Address:           prefix4,
 		Inet6Address:           prefix6,
-		MTU:                    settings.MTU,
+		MTU:                    mtu,
 		FileDescriptor:         dupFd,
 		DisableICMPForwarding:  settings.DisableICMPForwarding,
 		EndpointIndependentNat: settings.EndpointIndependentNAT,
