@@ -6,7 +6,6 @@ import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/mitm.dart';
 import 'package:fl_clash/providers/providers.dart';
-import 'package:fl_clash/state.dart';
 import 'package:fl_clash/ui/ui.dart';
 import 'package:fl_clash/widgets/icon.dart';
 import 'package:flutter/foundation.dart';
@@ -123,10 +122,9 @@ class AppEnvManager extends ConsumerWidget {
     if (safeMode) {
       return 'SAFE MODE';
     }
-    if (!globalState.isPre) {
-      return null;
-    }
-    return kDebugMode ? 'DEBUG' : globalState.appEnv.toUpperCase();
+    // The release artifacts of this fork are repackaged for sideloading, so the
+    // environment ribbon (PRE / DEV / ...) is limited to debug builds.
+    return kDebugMode ? 'DEBUG' : null;
   }
 
   @override
