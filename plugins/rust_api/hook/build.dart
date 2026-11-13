@@ -11,29 +11,63 @@ void main(List<String> args) async {
     }
     await FlutterRustBridgeNativeAssetsBuilder(
       cratePath: 'rust',
-      extraCargoEnvironmentVariables: _bindgenEnvironment(input),
+      extraCargoEnvironmentVariables: _cargoEnvironment(input),
     ).run(input: input, output: output);
   });
 }
 
-// rquickjs runs bindgen on Android, which must load the NDK's libclang; Linux
-// NDKs before r26 keep it under lib64, later ones and every macOS NDK under lib.
-Map<String, String> _bindgenEnvironment(BuildInput input) {
-  if (!input.config.buildCodeAssets ||
-      input.config.code.targetOS != OS.android) {
-    return const {};
+// rquickjs runs bindgen on Android and iOS, so it needs a libclang that can see
+// the platform SDK headers: Apple platforms get that from Xcode, Android from
+// the NDK Flutter hands us.
+Map<String, String> _cargoEnvironment(BuildInput input) {
+  if (!input.config.buildCodeAssets) return const {};
+  final code = input.config.code;
+  final environment = <String, String>{
+    // Stripping can misalign Mach-O LINKEDIT on Apple targets and the archive
+    // then fails to link (rust-lang/rust#157750).
+    if (code.targetOS == OS.macOS || code.targetOS == OS.iOS)
+      'CARGO_PROFILE_RELEASE_STRIP': 'none',
+  };
+
+  if (code.targetOS == OS.iOS) {
+    final sdk = code.iOS.targetSdk == IOSSdk.iPhoneOS
+        ? 'iphoneos'
+        : 'iphonesimulator';
+    String xcrun(List<String> arguments) {
+      final result = Process.runSync('xcrun', ['--sdk', sdk, ...arguments]);
+      if (result.exitCode != 0) {
+        throw ProcessException(
+          'xcrun',
+          arguments,
+          '${result.stderr}',
+          result.exitCode,
+        );
+      }
+      return (result.stdout as String).trim();
+    }
+
+    final sdkPath = xcrun(['--show-sdk-path']);
+    final clang = xcrun(['--find', 'clang']);
+    return {
+      ...environment,
+      'LIBCLANG_PATH': '${File(clang).parent.parent.path}/lib',
+      // Cross-compiling means bindgen cannot fall back to host SDK headers.
+      'BINDGEN_EXTRA_CLANG_ARGS': '-isysroot "$sdkPath"',
+      'IPHONEOS_DEPLOYMENT_TARGET': '${code.iOS.targetVersion}.0',
+    };
   }
-  final compiler = input.config.code.cCompiler?.compiler;
-  if (compiler == null) {
-    return const {};
-  }
+
+  if (code.targetOS != OS.android) return environment;
+
+  final compiler = code.cCompiler?.compiler;
+  if (compiler == null) return environment;
   final llvmRoot = File.fromUri(compiler).parent.parent;
   for (final name in const ['lib', 'lib64']) {
     final directory = Directory(
       '${llvmRoot.path}${Platform.pathSeparator}$name',
     );
     if (directory.existsSync() && directory.listSync().any(_isLibclang)) {
-      return {'LIBCLANG_PATH': directory.path};
+      return {...environment, 'LIBCLANG_PATH': directory.path};
     }
   }
   throw StateError(
