@@ -164,12 +164,17 @@ class GoBuilder {
       '-X $_versionSymbol=${config.coreVersion}',
   ].join(' ');
 
+  /// The extension links a second archive built with with_low_memory so the
+  /// Go heap stays under the ~50 MB extension cap.
+  String _tagsFor(Target target) =>
+      target.lowMemory ? '${config.tags} with_low_memory' : config.tags;
+
   List<String> _buildArguments(Target target, {String? outFile}) {
     final buildMode = target.isLib ? 'c-archive' : null;
     return [
       'build',
       '-ldflags=${_ldflags()}',
-      '-tags=${config.tags}',
+      '-tags=${_tagsFor(target)}',
       if (buildMode != null) '-buildmode=$buildMode',
       if (outFile != null) ...['-o', outFile],
       _mainPackageFor(target),
@@ -240,7 +245,7 @@ class GoBuilder {
       [
         'list',
         '-deps',
-        '-tags=${config.tags}',
+        '-tags=${_tagsFor(target)}',
         '-f',
         template,
         _mainPackageFor(target),

@@ -4,7 +4,10 @@ import 'build.dart';
 import 'error.dart';
 import 'target.dart';
 
-BuildRequest iosBuildRequest(Map<String, String> environment) {
+BuildRequest iosBuildRequest(
+  Map<String, String> environment, {
+  bool lowMemory = false,
+}) {
   if (environment['PLATFORM_NAME'] != 'iphoneos' ||
       environment['ARCHS']?.trim() != 'arm64') {
     throw BuildException('The iOS VPN Core requires an arm64 device build');
@@ -17,6 +20,6 @@ BuildRequest iosBuildRequest(Map<String, String> environment) {
   return BuildRequest(
     rootDir: rootDir,
     harnessDir: p.join(rootDir, 'plugins', 'setup', 'setup_hooks'),
-    target: Target.iosArm64,
+    target: lowMemory ? Target.iosArm64LowMem : Target.iosArm64,
   );
 }

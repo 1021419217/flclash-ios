@@ -232,8 +232,7 @@ func handleUpdateDns(value string) {
 			return
 		}
 		log.Infoln("[DNS] updateDns %s", value)
-		dns.UpdateSystemDNS(addr)
-		dns.FlushCacheWithDefaultResolver()
+		updateSystemDns(addr)
 	})
 }
 
