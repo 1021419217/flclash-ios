@@ -88,9 +88,19 @@ class ApplicationState extends ConsumerState<Application> {
   void _initLink() {
     linkManager.initAppLinksListen((url) async {
       unawaited(window?.show());
+      // A link that starts the app can land before the navigator has a context,
+      // and a dialog raised then is dropped or ends up under another route, so
+      // the prompt only appears after the user navigates back.
+      var host = globalState.navigatorKey.currentContext;
+      for (var i = 0; host == null && i < 20; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+        host = globalState.navigatorKey.currentContext;
+      }
+      if (host == null) return;
       final message = currentAppLocalizations.createProfileFromUrlTip(url);
       final parts = message.split(url);
       final res = await dialogs.showMessage(
+        context: host,
         title: currentAppLocalizations.addProfile,
         message: TextSpan(
           children: [
