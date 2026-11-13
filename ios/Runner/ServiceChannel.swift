@@ -34,7 +34,10 @@ final class ServiceChannel {
   private static var instance: ServiceChannel?
   private static var pendingQuickAction: QuickAction?
 
-  private static let packageName = "cc.chenx.flclash"
+  // Dart addresses these channels with its package name (lib/common/constant.dart),
+  // which is deliberately not the bundle id; the two drifted apart once the iOS
+  // layer was ported over and every call started raising MissingPluginException.
+  private static let channelPrefix = "com.follow.clash"
   private let channel: FlutterMethodChannel
   private let tileChannel: FlutterMethodChannel
   private let sharedStateStore: SharedStateStore
@@ -77,11 +80,11 @@ final class ServiceChannel {
 
   private init(messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(
-      name: "\(Self.packageName)/service",
+      name: "\(Self.channelPrefix)/service",
       binaryMessenger: messenger
     )
     let tileChannel = FlutterMethodChannel(
-      name: "\(Self.packageName)/tile",
+      name: "\(Self.channelPrefix)/tile",
       binaryMessenger: messenger
     )
     let sharedStateStore = SharedStateStore()

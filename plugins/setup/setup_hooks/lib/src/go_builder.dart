@@ -167,8 +167,13 @@ class GoBuilder {
   // linker can set it for every reader.
   static const _versionSymbol = 'github.com/metacubex/mihomo/constant.Version';
 
-  String _ldflags() => [
+  /// The iOS archives ship inside the app bundle, so their DWARF is dead
+  /// weight: nothing symbolises a Go frame from an Apple crash report anyway.
+  /// Only -w is applied; -s would drop the symbol table the linker needs to
+  /// resolve the //export entries.
+  String _ldflags(Target target) => [
     config.goLdflags,
+    if (target.isLib) '-w',
     if (config.coreVersion.isNotEmpty)
       '-X $_versionSymbol=${config.coreVersion}',
   ].join(' ');
@@ -182,8 +187,9 @@ class GoBuilder {
     final buildMode = target.isLib ? 'c-archive' : null;
     return [
       'build',
-      '-ldflags=${_ldflags()}',
+      '-ldflags=${_ldflags(target)}',
       '-tags=${_tagsFor(target)}',
+      if (target.isLib) '-trimpath',
       if (buildMode != null) '-buildmode=$buildMode',
       if (outFile != null) ...['-o', outFile],
       _mainPackageFor(target),

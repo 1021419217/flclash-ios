@@ -86,7 +86,10 @@ jobs:
           # rquickjs generates its iOS bindings at build time; bindgen needs a
           # libclang and the Xcode toolchain copy is the one that matches the SDK.
           LIBCLANG_PATH: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib
-        run: dart setup.dart ios --no-codesign -v
+        # --env stable is what removes the red PRE ribbon: APP_ENV defaults to
+        # "pre" and AppEnvManager paints the channel name on the top-right
+        # corner for anything that is not stable.
+        run: dart setup.dart ios --no-codesign --env stable -v
 
       # TrollStore keeps whatever entitlements the binaries already carry, and
       # this build starts with none, so the tunnel would come up without
