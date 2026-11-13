@@ -3,9 +3,6 @@ import NetworkExtension
 import os
 
 final class PacketTunnelNetworkConfiguration {
-  /// Same ceiling the core applies, so the utun and the stack agree.
-  static let maxMtu = 1500
-
   private let ipv4Address = "198.18.0.1"
   private let ipv4AddressPrefix = "198.18.0.1/30"
   private let ipv4SubnetMask = "255.255.255.252"
@@ -25,9 +22,7 @@ final class PacketTunnelNetworkConfiguration {
     let settings = NEPacketTunnelNetworkSettings(
       tunnelRemoteAddress: "127.0.0.1"
     )
-    // The Android default is 9000, which the phone's own link cannot carry;
-    // the core clamps to the same ceiling, so keep both sides in step.
-    settings.mtu = NSNumber(value: min(options.mtu, Self.maxMtu))
+    settings.mtu = NSNumber(value: options.mtu)
 
     let ipv4Settings = NEIPv4Settings(
       addresses: [ipv4Address],
