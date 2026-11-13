@@ -16,6 +16,10 @@ class Request {
   late final Dio dio;
   late final Dio _clashDio;
 
+  /// Straight out of the device, for one retry when the core's port is not
+  /// listening yet.
+  late final Dio _directDio;
+
   /// Refuses an untrusted certificate even with the certificate check turned
   /// off, because what it fetches is installed, on Windows as administrator.
   @visibleForTesting
@@ -41,6 +45,14 @@ class Request {
         return client;
       },
     );
+    _directDio = Dio();
+    _directDio.httpClientAdapter = IOHttpClientAdapter(
+      createHttpClient: () {
+        return HttpClient()
+          ..userAgent = globalState.ua
+          ..findProxy = ((_) => 'DIRECT');
+      },
+    );
     releaseDio = Dio(BaseOptions(headers: {'User-Agent': browserUa}));
     releaseDio.httpClientAdapter = IOHttpClientAdapter(
       createHttpClient: () {
@@ -59,13 +71,42 @@ class Request {
     return FlClashHttpOverrides.findProxyForReader(read, uri);
   }
 
-  Future<Response<T>> _download<T>(String url, ResponseType responseType) {
+  Future<Response<T>> _download<T>(String url, ResponseType responseType) async {
     final target = downloadTarget(url);
+    try {
+      return await _get<T>(target, responseType, url, _clashDio);
+    } on DioException catch (error) {
+      // The proxy this build downloads through is its own core, so while the
+      // tunnel is still starting the port is closed and every import dies at
+      // connect — leaving no way to add a profile and find out why. One
+      // direct retry gets the profile in.
+      if (!_isConnectFailure(error) || error.requestOptions.extra['direct'] == true) {
+        rethrow;
+      }
+      commonPrint.log(
+        'proxy download failed, retrying direct: ${compactError(error)}',
+        logLevel: LogLevel.warning,
+      );
+      return _get<T>(target, responseType, url, _directDio, extra: const {'direct': true});
+    }
+  }
+
+  Future<Response<T>> _get<T>(
+    ({Uri uri, Map<String, Object> headers}) target,
+    ResponseType responseType,
+    String url,
+    Dio client, {
+    Map<String, Object> extra = const {},
+  }) {
     final cancelToken = CancelToken();
-    return _clashDio
+    return client
         .getUri<T>(
           target.uri,
-          options: Options(responseType: responseType, headers: target.headers),
+          options: Options(
+            responseType: responseType,
+            headers: target.headers,
+            extra: extra,
+          ),
           cancelToken: cancelToken,
         )
         .timeout(
@@ -74,11 +115,18 @@ class Request {
             cancelToken.cancel();
             throw DioException.receiveTimeout(
               timeout: downloadTimeoutDuration,
-              requestOptions: RequestOptions(path: url),
+              requestOptions: RequestOptions(path: url, extra: extra),
             );
           },
         );
   }
+
+  static bool _isConnectFailure(DioException error) => switch (error.type) {
+    DioExceptionType.connectionError ||
+    DioExceptionType.connectionTimeout ||
+    DioExceptionType.unknown => true,
+    _ => false,
+  };
 
   Future<Response<Uint8List>> getFileResponseForUrl(String url) async {
     try {
