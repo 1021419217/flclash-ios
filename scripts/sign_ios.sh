@@ -10,6 +10,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IPA="${1:-$ROOT/dist/FlClash.ipa}"
+# The caller passes a repo-relative path; zip runs from the temp directory, so
+# resolve it once and keep using the absolute form.
+IPA_DIR="$(cd "$(dirname "$IPA")" && pwd)"
+IPA="$IPA_DIR/$(basename "$IPA")"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -41,6 +45,8 @@ while IFS= read -r -d '' candidate; do
   fi
 done < <(find "$APP/Frameworks" "$APP/PlugIns" -type f -perm -111 -print0 2>/dev/null)
 
-rm -f "$IPA"
-(cd "$WORK" && zip -qry "$IPA" Payload)
+# Pack beside the original and move it into place only once zip succeeded, so a
+# failed repack never leaves the runner without a package.
+(cd "$WORK" && zip -qry "$WORK/FlClash-resigned.ipa" Payload)
+mv -f "$WORK/FlClash-resigned.ipa" "$IPA"
 echo "resigned: $IPA"
