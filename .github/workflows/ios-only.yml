@@ -61,6 +61,10 @@ jobs:
             curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
           fi
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          export PATH="$HOME/.cargo/bin:$PATH"
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+          rustc --version
+          cargo --version
 
       - name: Get Flutter Dependency
         run: |
