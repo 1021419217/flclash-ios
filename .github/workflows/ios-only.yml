@@ -30,6 +30,9 @@ jobs:
           git config --global url."https://github.com/".insteadOf "git@github.com:"
           git submodule sync --recursive
           git submodule update --init --recursive --depth 1
+          test -f plugins/prism_ui/pubspec.yaml
+          test -f core/Clash.Meta/go.mod
+          git submodule status --recursive
 
       - name: Setup Go
         uses: actions/setup-go@v5
