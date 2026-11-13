@@ -88,39 +88,15 @@ class ApplicationState extends ConsumerState<Application> {
   void _initLink() {
     linkManager.initAppLinksListen((url) async {
       unawaited(window?.show());
-      // A link that starts the app can land before the navigator has a context,
-      // and a dialog raised then is dropped or ends up under another route, so
-      // the prompt only appears after the user navigates back.
-      var host = globalState.navigatorKey.currentContext;
-      for (var i = 0; host == null && i < 20; i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 150));
-        host = globalState.navigatorKey.currentContext;
-      }
-      if (host == null) return;
-      final message = currentAppLocalizations.createProfileFromUrlTip(url);
-      final parts = message.split(url);
-      final res = await dialogs.showMessage(
-        context: host,
-        title: currentAppLocalizations.addProfile,
-        message: TextSpan(
-          children: [
-            TextSpan(text: parts.first),
-            TextSpan(
-              text: url,
-              style: TextStyle(
-                color: context.colorScheme.primary,
-                decoration: TextDecoration.underline,
-                decorationColor: context.colorScheme.primary,
-              ),
-            ),
-            if (parts.length > 1) TextSpan(text: parts.last),
-          ],
-        ),
-      );
-      if (res != true) return;
-      unawaited(
-        ref.read(profilesActionProvider.notifier).addProfileFromLink(url),
-      );
+      // Tapping a subscription link is the confirmation, so go straight to the
+      // import. A prompt raised while the app is still coming up cannot be
+      // drawn in that first frame; the route it pushes only surfaces as a back
+      // button on the page underneath, and the user has to tap that before the
+      // prompt becomes visible. Skipping the prompt removes the step and the
+      // artefact with it. Import failures still surface through the banner.
+      await ref
+          .read(profilesActionProvider.notifier)
+          .addProfileFromLink(url, silence: true);
     });
   }
 

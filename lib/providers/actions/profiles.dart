@@ -353,10 +353,12 @@ class ProfilesAction extends _$ProfilesAction {
     String link, {
     String? label,
     String ageSecretKey = '',
+    bool silence = false,
   }) async {
     _showProfiles();
     final profile = await globalState.loadingRun(
       tag: LoadingTag.profiles,
+      silence: silence,
       () => link.isShareLink
           ? _fromShareLinks(Profile.normal(label: label), [link])
           : _withAgeSecretKey(
