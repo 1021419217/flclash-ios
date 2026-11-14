@@ -1,5 +1,6 @@
 import Flutter
 import Foundation
+import UIKit
 import os
 
 @MainActor
@@ -215,6 +216,51 @@ final class ServiceChannel {
       Task {
         let running = await tunnelController.getRunTime() > 0
         result(running ? sharedStateStore.activeVpnOptions() : nil)
+      }
+    // Alternate app icons. The icon PNGs and the CFBundleAlternateIcons
+    // declarations are injected into the bundle before the ad-hoc codesign by
+    // scripts/prepare_ios_icons.py, so a fakesigned IPA can switch icons too.
+    case "supportsAlternateIcons":
+      result(UIApplication.shared.supportsAlternateIcons)
+    case "getAlternateIconName":
+      result(UIApplication.shared.alternateIconName)
+    case "setAlternateIconName":
+      let requested = call.arguments as? String
+      let nameToSet: String? =
+        (requested == nil || requested?.isEmpty == true ||
+          requested == "default" || requested == "AppIcon-Classic")
+        ? nil
+        : requested
+      if UIApplication.shared.alternateIconName == nameToSet {
+        result(true)
+        return
+      }
+      guard UIApplication.shared.supportsAlternateIcons else {
+        result(
+          FlutterError(
+            code: "ICONS_UNAVAILABLE",
+            message: "当前安装包没有可用的备用图标声明，请安装包含完整图标资源的版本。",
+            details: nil
+          )
+        )
+        return
+      }
+      UIApplication.shared.setAlternateIconName(nameToSet) { error in
+        // The system callback has no actor guarantee; FlutterResult must be
+        // delivered on the main thread.
+        DispatchQueue.main.async {
+          if let error = error as NSError? {
+            result(
+              FlutterError(
+                code: "SET_ICON_ERROR",
+                message: "\(error.localizedDescription) [\(error.domain):\(error.code)]",
+                details: ["domain": error.domain, "code": error.code]
+              )
+            )
+          } else {
+            result(true)
+          }
+        }
       }
     default:
       result(FlutterMethodNotImplemented)

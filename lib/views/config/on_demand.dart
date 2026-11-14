@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/plugins/app.dart';
+import 'package:fl_clash/plugins/service.dart';
 import 'package:fl_clash/providers/providers.dart';
+import 'package:fl_clash/state.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/services.dart';
@@ -35,6 +37,36 @@ class _OnDemandViewState extends ConsumerState<OnDemandView>
   bool get _isWindows => widget.isWindows ?? system.isWindows;
 
   bool get _needsLocationPermission => _isAndroid || _isMacOS || _isWindows;
+
+  bool _alwaysOn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadAlwaysOn());
+  }
+
+  Future<void> _loadAlwaysOn() async {
+    final value = await preferences.getAlwaysOn();
+    if (!mounted) return;
+    setState(() => _alwaysOn = value);
+  }
+
+  /// Push the current on-demand settings to the Network Extension. Swift
+  /// rebuilds NEOnDemandRuleConnect / NEOnDemandRuleDisconnect as soon as the
+  /// shared state is saved, so one sync is enough for both switches.
+  void _syncOnDemand() {
+    service?.syncState(
+      globalState.container.read(sharedStateProvider),
+      excludeSSIDs: ref.read(excludeSSIDsProvider),
+    );
+  }
+
+  void _handleAlwaysOnChanged(bool value) {
+    setState(() => _alwaysOn = value);
+    unawaited(preferences.setAlwaysOn(value));
+    _syncOnDemand();
+  }
 
   void _handlePermanentlyDeniedLocationPermission() {
     if (_isMacOS) {
@@ -138,12 +170,14 @@ class _OnDemandViewState extends ConsumerState<OnDemandView>
       }
       return [...newSSIDS, newSSID];
     });
+    _syncOnDemand();
   }
 
   void _handleReorder(int oldIndex, newIndex) {
     ref.read(excludeSSIDsProvider.notifier).update((value) {
       return value.copyAndReorder(oldIndex, newIndex);
     });
+    _syncOnDemand();
   }
 
   Widget _buildItem({
@@ -197,6 +231,7 @@ class _OnDemandViewState extends ConsumerState<OnDemandView>
           .toList();
     });
     ref.read(itemsProvider(key).notifier).value = {};
+    _syncOnDemand();
   }
 
   Widget _buildAuthorizeButton({
@@ -378,10 +413,31 @@ class _OnDemandViewState extends ConsumerState<OnDemandView>
     return Scaffold(
       body: CustomScrollView(
         slivers: [
+          if (system.isIOS)
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16).copyWith(
+                top: context.sectionsTopPadding,
+              ),
+              sliver: SliverToBoxAdapter(
+                child: generateSection(
+                  title: 'VPN 按需规则',
+                  items: [
+                    ListItem.toggle(
+                      title: const Text('始终连接'),
+                      subtitle: const Text('在任何网络环境下保持 VPN 连接'),
+                      value: _alwaysOn,
+                      onChanged: _handleAlwaysOnChanged,
+                    ),
+                  ],
+                  footer:
+                      '开启后 VPN 会随网络变化自动重连；下方 WiFi 列表中的网络将自动断开 VPN。',
+                ),
+              ),
+            ),
           SliverPadding(
             padding: const EdgeInsets.symmetric(
               horizontal: 16,
-            ).copyWith(top: context.sectionsTopPadding),
+            ).copyWith(top: system.isIOS ? 0 : context.sectionsTopPadding),
             sliver: SliverToBoxAdapter(child: _buildPrerequisites()),
           ),
           SliverPadding(

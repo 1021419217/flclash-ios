@@ -41,7 +41,10 @@ class _AndroidContainerState extends ConsumerState<AndroidManager>
           await preferences.saveShareState(next);
         }, duration: const Duration(seconds: 1));
         if (prev?.needSyncSharedState != next.needSyncSharedState) {
-          service?.syncState(next.needSyncSharedState);
+          service?.syncState(
+            next.needSyncSharedState,
+            excludeSSIDs: ref.read(excludeSSIDsProvider),
+          );
         }
       }
     });

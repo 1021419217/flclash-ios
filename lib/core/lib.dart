@@ -66,6 +66,7 @@ class CoreLib extends CoreHandlerInterface {
     final syncError =
         await _service?.syncState(
           globalState.container.read(sharedStateProvider),
+          excludeSSIDs: globalState.container.read(excludeSSIDsProvider),
         ) ??
         '';
     if (syncError.isNotEmpty) {

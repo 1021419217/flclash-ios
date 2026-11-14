@@ -27,6 +27,13 @@ APP="$WORK/Payload/Runner.app"
 BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
 echo "bundle id: $BUNDLE_ID"
 
+# Alternate app icons must be declared in Info.plist and shipped as standalone
+# PNGs before anything is signed. Changing Info.plist after a codesign would
+# invalidate that signature, so this has to be the very first mutation.
+python3 "$ROOT/scripts/prepare_ios_icons.py" \
+  --app "$APP" \
+  --assets "$ROOT/ios/Runner/Assets.xcassets"
+
 sign_with_entitlements() {
   local binary="$1" template="$2" label="$3"
   [ -f "$binary" ] || {

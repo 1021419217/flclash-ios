@@ -71,24 +71,88 @@ class Request {
     return FlClashHttpOverrides.findProxyForReader(read, uri);
   }
 
+  /// Airport panels (V2Board / XBoard / SSPanel) and Cloudflare bot filters
+  /// reject unknown clients with 401/403/406 before serving the subscription.
+  /// Retrying the same body with a set of well-known client User-Agents gets
+  /// past most of them without any user-visible setting.
+  static const _subscriptionUserAgents = [
+    'clash-verge/v2.4.2 ClashforWindows/0.20.39 Clash.Meta',
+    'ClashforWindows/0.20.39',
+    'Shadowrocket/2.2.35 (iOS 18.1; iPhone)',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1',
+    'clash.meta',
+  ];
+
+  List<String> _userAgentCandidates() => <String>[
+    if (globalState.ua.isNotEmpty) globalState.ua,
+    ..._subscriptionUserAgents,
+  ].toSet().toList();
+
+  Map<String, Object> _subscriptionHeaders(
+    ({Uri uri, Map<String, Object> headers}) target,
+    String ua,
+  ) => <String, Object>{
+    ...target.headers,
+    'User-Agent': ua,
+    'Accept': '*/*',
+    'Accept-Language': 'zh-CN,zh-Hans;q=0.9,en;q=0.8',
+  };
+
   Future<Response<T>> _download<T>(String url, ResponseType responseType) async {
     final target = downloadTarget(url);
-    try {
-      return await _get<T>(target, responseType, url, _clashDio);
-    } on DioException catch (error) {
-      // The proxy this build downloads through is its own core, so while the
-      // tunnel is still starting the port is closed and every import dies at
-      // connect — leaving no way to add a profile and find out why. One
-      // direct retry gets the profile in.
-      if (!_isConnectFailure(error) || error.requestOptions.extra['direct'] == true) {
-        rethrow;
-      }
-      commonPrint.log(
-        'proxy download failed, retrying direct: ${compactError(error)}',
-        logLevel: LogLevel.warning,
+    final candidates = _userAgentCandidates();
+    DioException? lastRejection;
+    for (final ua in candidates) {
+      final attempt = (
+        uri: target.uri,
+        headers: _subscriptionHeaders(target, ua),
       );
-      return _get<T>(target, responseType, url, _directDio, extra: const {'direct': true});
+      try {
+        return await _get<T>(attempt, responseType, url, _clashDio);
+      } on DioException catch (error) {
+        final status = error.response?.statusCode;
+        if (status == 401 || status == 403 || status == 406) {
+          lastRejection = error;
+          commonPrint.log(
+            'Download $url with UA "$ua" returned $status, trying next UA candidate',
+            logLevel: LogLevel.warning,
+          );
+          continue;
+        }
+        // The proxy this build downloads through is its own core, so while the
+        // tunnel is still starting the port is closed and every import dies at
+        // connect — leaving no way to add a profile and find out why. One
+        // direct retry gets the profile in.
+        if (!_isConnectFailure(error) || error.requestOptions.extra['direct'] == true) {
+          rethrow;
+        }
+        commonPrint.log(
+          'proxy download failed, retrying direct: ${compactError(error)}',
+          logLevel: LogLevel.warning,
+        );
+        return _get<T>(attempt, responseType, url, _directDio, extra: const {'direct': true});
+      }
     }
+    // Every known UA was rejected. Some panels only answer a plain direct
+    // request, so try that once before surfacing the 403.
+    if (lastRejection != null) {
+      final direct = (
+        uri: target.uri,
+        headers: _subscriptionHeaders(target, _subscriptionUserAgents.first),
+      );
+      try {
+        return await _get<T>(
+          direct,
+          responseType,
+          url,
+          _directDio,
+          extra: const {'direct': true},
+        );
+      } catch (_) {
+        throw lastRejection;
+      }
+    }
+    throw StateError('no user agent candidates');
   }
 
   Future<Response<T>> _get<T>(

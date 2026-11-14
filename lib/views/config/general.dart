@@ -4,6 +4,7 @@ import 'package:fl_clash/features/form/form.dart';
 import 'package:fl_clash/l10n/l10n.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
+import 'package:fl_clash/views/config/app_icon.dart';
 import 'package:fl_clash/views/config/on_demand.dart';
 import 'package:fl_clash/views/config/override.dart';
 import 'package:fl_clash/views/config/user_agents.dart';
@@ -402,6 +403,17 @@ class GeneralView extends ConsumerWidget {
           bottom: 16 + context.bottomInset,
         ),
         children: [
+          if (system.isIOS)
+            generateSection(
+              title: '外观',
+              items: [
+                ListItem.open(
+                  title: const Text('应用图标'),
+                  widget: const AppIconView(),
+                ),
+              ],
+              footer: '提供 8 套备用图标，切换后主屏幕图标即时生效。',
+            ),
           generateSection(
             title: appLocalizations.startupAndBackground,
             items: _startupItems(appLocalizations),

@@ -143,10 +143,23 @@ class Service {
     return await methodChannel.invokeMethod<String>('init') ?? '';
   }
 
-  Future<String> syncState(SharedState state) async {
+  /// The iOS Network Extension owns the on-demand rules. Swift reads
+  /// `alwaysOn` / `excludeSSIDs` from this very payload and rebuilds
+  /// NEOnDemandRuleConnect / NEOnDemandRuleDisconnect right after saving it,
+  /// so the two keys must travel with every sync. Injecting them here at the
+  /// channel boundary keeps the generated freezed models untouched.
+  Future<String> syncState(
+    SharedState state, {
+    List<String> excludeSSIDs = const [],
+  }) async {
+    final payload = Map<String, dynamic>.from(
+      json.decode(json.encode(state)) as Map,
+    );
+    payload['alwaysOn'] = await preferences.getAlwaysOn();
+    payload['excludeSSIDs'] = excludeSSIDs;
     return await methodChannel.invokeMethod<String>(
           'syncState',
-          json.encode(state),
+          json.encode(payload),
         ) ??
         '';
   }
@@ -161,6 +174,26 @@ class Service {
       return null;
     }
     return DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  Future<bool> supportsAlternateIcons() async {
+    if (!system.isIOS) return false;
+    return await methodChannel.invokeMethod<bool>('supportsAlternateIcons') ??
+        false;
+  }
+
+  Future<String?> getAlternateIconName() async {
+    if (!system.isIOS) return null;
+    return await methodChannel.invokeMethod<String>('getAlternateIconName');
+  }
+
+  Future<bool> setAlternateIconName(String? name) async {
+    if (!system.isIOS) return false;
+    return await methodChannel.invokeMethod<bool>(
+          'setAlternateIconName',
+          name,
+        ) ??
+        false;
   }
 
   bool get hasListeners {

@@ -61,6 +61,20 @@ class Preferences {
     await preferences?.setString('sharedState', json.encode(shareState));
   }
 
+  /// Always-On (NEOnDemandRuleConnect) and the per-SSID disconnect rules live
+  /// in the iOS Network Extension, so the switch is mirrored into the shared
+  /// state payload on every sync instead of being part of the freezed model.
+  /// Keep the value here so it survives a restart.
+  Future<bool> getAlwaysOn() async {
+    final preferences = await _store.value;
+    return preferences?.getBool('alwaysOn') ?? false;
+  }
+
+  Future<void> setAlwaysOn(bool value) async {
+    final preferences = await _store.value;
+    await preferences?.setBool('alwaysOn', value);
+  }
+
   /// The md5 of the config.yaml the Core last accepted, which is also what
   /// the Android service applies when it starts without Flutter.
   Future<String?> getAppliedConfigMd5() async {
