@@ -11,6 +11,33 @@ final class PacketTunnelNetworkConfiguration {
   private let ipv6AddressPrefix = "fdfe:dcba:9876::1/126"
   private let ipv6DNS = "fdfe:dcba:9876::2"
   private let netAny = "0.0.0.0"
+
+  // Shadowrocket / Loon / Quantumult X expose this switch as
+  // "排除路由 0.0.0.0/31". Open-source Network Extension code (OneXray
+  // swift/Tunnel/PacketTunnelProvider.swift, AdGuard
+  // PacketTunnelSettingsProvider.swift) implements it by KEEPING the literal
+  // default route and adding 0.0.0.0/31 (v6: ::/127) to excludedRoutes; iOS
+  // subtracts the exclusions from 0.0.0.0/0 and stops drawing the badge.
+  // The remaining entries keep private/bypassed networks direct -- Dart
+  // normally folds them into routeAddress, which we deliberately do not use
+  // while hiding the icon.
+  private static let hideIconV4Exclusions: [(String, Int)] = [
+    ("0.0.0.0", 31),
+    ("10.0.0.0", 8),
+    ("127.0.0.0", 8),
+    ("169.254.0.0", 16),
+    ("172.16.0.0", 12),
+    ("192.168.0.0", 16),
+    ("224.0.0.0", 4),
+    ("255.255.255.255", 32),
+  ]
+  private static let hideIconV6Exclusions: [(String, Int)] = [
+    ("::", 127),
+    ("fc00::", 7),
+    ("fe80::", 10),
+    ("ff00::", 8),
+  ]
+
   private let logger = Logger(
     subsystem: PacketTunnelEnvironment.extensionBundleIdentifier,
     category: "PacketTunnelNetworkConfiguration"
@@ -45,34 +72,27 @@ final class PacketTunnelNetworkConfiguration {
       )
     }
     if hideVpnIcon {
-      // iOS shows the status-bar VPN badge (and the lock-screen banner) as
-      // long as the tunnel declares a literal 0.0.0.0/0 default route.
-      // 0.9.12 only set excludedRoutes while keeping [.default()], so that
-      // default route was still declared and the badge never disappeared.
+      // 0.9.12 / 0.9.13 never reached their split-route branch: Dart's
+      // vpnRouteAddress() returns a long CIDR list whenever
+      // bypassPrivateRoute is on (the default), so ipv4Routes is NOT empty.
+      // 0.9.13 additionally removed the default route, which the badge logic
+      // depends on ("Keep the default routes" in OneXray's implementation).
       //
-      // Shadowrocket / Loon hide it by declaring a split route set instead:
-      // 0.0.0.0/1 + 128.0.0.0/1 still covers every IPv4 address but contains
-      // no default route. Keep the 0.0.0.0/31 runtime exclusion too -- it is
-      // reserved/unroutable, so no real traffic is diverted, and it keeps the
-      // route set split even if the system normalizes the two /1 routes.
-      ipv4Settings.includedRoutes = ipv4Routes.isEmpty
-        ? [
-          NEIPv4Route(
-            destinationAddress: "0.0.0.0",
-            subnetMask: "128.0.0.0"
-          ),
-          NEIPv4Route(
-            destinationAddress: "128.0.0.0",
-            subnetMask: "128.0.0.0"
-          ),
-        ]
-        : ipv4Routes
-      ipv4Settings.excludedRoutes = [
-        NEIPv4Route(
-          destinationAddress: "0.0.0.0",
-          subnetMask: "255.255.255.254"
-        )
-      ]
+      // Correct behavior: declare 0.0.0.0/0 and exclude 0.0.0.0/31. iOS
+      // subtracts the exclusions itself, so no CIDR math is needed here.
+      ipv4Settings.includedRoutes = [.default()]
+      ipv4Settings.excludedRoutes = Self.hideIconV4Exclusions.compactMap {
+        entry in
+        guard let mask = self.ipv4SubnetMask(prefixLength: entry.1) else {
+          return nil
+        }
+        return NEIPv4Route(destinationAddress: entry.0, subnetMask: mask)
+      }
+      // Long literal stays visible in the Mach-O for delivery verification;
+      // short strings like "0.0.0.0/31" get inlined by Swift SmallString.
+      logger.info(
+        "hideVpnIcon: keep default route, apply 0.0.0.0/31 exclusion"
+      )
     } else {
       ipv4Settings.includedRoutes = ipv4Routes.isEmpty
         ? [.default()]
@@ -100,26 +120,17 @@ final class PacketTunnelNetworkConfiguration {
       }
       ipv6RouteCount = ipv6Routes.count
       if hideVpnIcon {
-        // IPv6 counterpart of the split route set above: ::/1 + 8000::/1
-        // cover the whole v6 space without declaring a literal default route.
-        ipv6Settings.includedRoutes = ipv6Routes.isEmpty
-          ? [
-            NEIPv6Route(
-              destinationAddress: "::",
-              networkPrefixLength: NSNumber(value: 1)
-            ),
-            NEIPv6Route(
-              destinationAddress: "8000::",
-              networkPrefixLength: NSNumber(value: 1)
-            ),
-          ]
-          : ipv6Routes
-        ipv6Settings.excludedRoutes = [
+        // v6 counterpart: keep ::/0 and exclude ::/127 plus the ULA,
+        // link-local and multicast ranges Dart would otherwise fold into
+        // routeAddress. OneXray applies the same ::/127 on iOS.
+        ipv6Settings.includedRoutes = [.default()]
+        ipv6Settings.excludedRoutes = Self.hideIconV6Exclusions.map {
+          entry in
           NEIPv6Route(
-            destinationAddress: "::",
-            networkPrefixLength: NSNumber(value: 127)
+            destinationAddress: entry.0,
+            networkPrefixLength: NSNumber(value: entry.1)
           )
-        ]
+        }
       } else {
         ipv6Settings.includedRoutes = ipv6Routes.isEmpty
           ? [.default()]

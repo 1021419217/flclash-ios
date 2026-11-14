@@ -468,15 +468,16 @@ class _OnDemandViewState extends ConsumerState<OnDemandView>
                       onChanged: _handleAlwaysOnChanged,
                     ),
                     ListItem.toggle(
-                      title: const Text('隐藏 VPN 图标'),
-                      subtitle: const Text('隐藏状态栏 VPN 标识与锁屏横幅'),
+                      title: const Text('排除路由 0.0.0.0/31'),
+                      subtitle: const Text('开启后隐藏状态栏 VPN 图标'),
                       value: _hideVpnIcon,
                       onChanged: _handleHideVpnIconChanged,
                     ),
                   ],
                   footer:
                       '「始终连接」开启后 VPN 会随网络变化自动重连；下方 WiFi 列表中的网络将自动断开 VPN。'
-                      '「隐藏 VPN 图标」不影响代理流量，切换后运行中会自动重连 VPN 立即生效（未连接时下次连接生效）。',
+                      '「排除路由」与小火箭 / Loon / 圈X 同名同机制：保留默认路由并排除 0.0.0.0/31，'
+                      '不影响代理流量；切换后运行中会自动重连 VPN 立即生效（未连接时下次连接生效）。',
                 ),
               ),
             ),
