@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/features/form/form.dart';
@@ -405,14 +407,28 @@ class GeneralView extends ConsumerWidget {
         children: [
           if (system.isIOS)
             generateSection(
-              title: '外观',
+              title: '外观与手感',
               items: [
                 ListItem.open(
                   title: const Text('应用图标'),
                   widget: const AppIconView(),
                 ),
+                ValueListenableBuilder<bool>(
+                  valueListenable: hapticFeedbackEnabled,
+                  builder: (_, enabled, __) => ListItem.toggle(
+                    title: const Text('操作震动反馈'),
+                    subtitle: const Text('点击、切换等操作时提供轻微触感'),
+                    value: enabled,
+                    onChanged: (value) {
+                      hapticFeedbackEnabled.value = value;
+                      unawaited(preferences.setHapticFeedback(value));
+                    },
+                  ),
+                ),
               ],
-              footer: '提供 8 套备用图标，切换后主屏幕图标即时生效。',
+              footer:
+                  '提供 8 套备用图标，切换后主屏幕图标即时生效；'
+                  '操作震动反馈默认开启，与圈X、Surge、小火箭一致，可随时关闭。',
             ),
           generateSection(
             title: appLocalizations.startupAndBackground,

@@ -115,10 +115,10 @@ class _AppIconViewState extends ConsumerState<AppIconView> {
       }
       if (!mounted) return;
       setState(() => _currentIconId = option.id);
-      dialogs.showBanner(
-        '已切换应用图标为【${option.name}】',
-        level: BannerLevel.success,
-      );
+      // A success banner renders in the theme's green successContainer, which
+      // clashes with the app's neutral/glass surface. Use the neutral info
+      // level so the toast matches the rest of the UI; errors stay red.
+      dialogs.showBanner('已切换应用图标为【${option.name}】');
     } catch (error) {
       if (!mounted) return;
       final denied =

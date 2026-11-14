@@ -89,6 +89,19 @@ class Preferences {
     await preferences?.setBool('hideVpnIcon', value);
   }
 
+  /// Light tap haptics on every button/switch/list interaction, like Circuit,
+  /// Surge and Shadowrocket. The upstream UI has none, so the app-root feedback
+  /// layer reads this value on each tap. Defaults on.
+  Future<bool> getHapticFeedback() async {
+    final preferences = await _store.value;
+    return preferences?.getBool('hapticFeedback') ?? true;
+  }
+
+  Future<void> setHapticFeedback(bool value) async {
+    final preferences = await _store.value;
+    await preferences?.setBool('hapticFeedback', value);
+  }
+
   /// The md5 of the config.yaml the Core last accepted, which is also what
   /// the Android service applies when it starts without Flutter.
   Future<String?> getAppliedConfigMd5() async {

@@ -47,8 +47,14 @@ Widget buildManagerStack({
           ),
         )
       : AndroidManager(child: TileManager(child: state));
-  return AppEnvManager(
-    child: LocaleManager(child: ThemeManager(child: platformState)),
+  // App-wide light tap haptics (Circuit / Surge / Shadowrocket feel). One
+  // translucent listener at the root of the whole page stack covers every
+  // button, switch and list tap, and stays out of the shared views and the
+  // prism_ui submodule so future upstream merges remain clean.
+  return HapticFeedbackScope(
+    child: AppEnvManager(
+      child: LocaleManager(child: ThemeManager(child: platformState)),
+    ),
   );
 }
 

@@ -92,7 +92,19 @@ class _OnDemandViewState extends ConsumerState<OnDemandView>
   Future<void> _persistHideVpnIcon(bool value) async {
     await preferences.setHideVpnIcon(value);
     if (!mounted) return;
-    _syncOnDemand();
+    // The extension reads hideVpnIcon only while startTunnel builds its
+    // network settings, so persist -> push shared state -> reconnect must run
+    // in this exact order. Without the reconnect the switch looks like it does
+    // nothing until the user manually toggles VPN off and on again, which is
+    // exactly the "打开不起作用" symptom from 0.9.12.
+    await service?.syncState(
+      globalState.container.read(sharedStateProvider),
+      excludeSSIDs: ref.read(excludeSSIDsProvider),
+    );
+    if (!mounted) return;
+    // restartVpn() is a no-op when the tunnel is not running, so a switch
+    // toggled while disconnected simply applies on the next connection.
+    await ref.read(setupActionProvider.notifier).restartVpn();
   }
 
   void _handlePermanentlyDeniedLocationPermission() {
@@ -464,7 +476,7 @@ class _OnDemandViewState extends ConsumerState<OnDemandView>
                   ],
                   footer:
                       '「始终连接」开启后 VPN 会随网络变化自动重连；下方 WiFi 列表中的网络将自动断开 VPN。'
-                      '「隐藏 VPN 图标」不影响代理流量，在下次连接 VPN 时生效。',
+                      '「隐藏 VPN 图标」不影响代理流量，切换后运行中会自动重连 VPN 立即生效（未连接时下次连接生效）。',
                 ),
               ),
             ),

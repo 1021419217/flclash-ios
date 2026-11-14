@@ -44,22 +44,39 @@ final class PacketTunnelNetworkConfiguration {
         subnetMask: subnetMask
       )
     }
-    ipv4Settings.includedRoutes = ipv4Routes.isEmpty
-      ? [.default()]
-      : ipv4Routes
     if hideVpnIcon {
-      // iOS keeps the status-bar VPN badge (and the lock-screen banner) while
-      // the tunnel claims an untouched default route. Declaring a tiny
-      // runtime exclusion makes the system treat the tunnel as split and drop
-      // the badge -- the same mechanism Shadowrocket / Loon use for their
-      // "hide VPN icon" switch. 0.0.0.0/31 holds only reserved, unroutable
-      // addresses, so no real traffic is diverted away from the tunnel.
+      // iOS shows the status-bar VPN badge (and the lock-screen banner) as
+      // long as the tunnel declares a literal 0.0.0.0/0 default route.
+      // 0.9.12 only set excludedRoutes while keeping [.default()], so that
+      // default route was still declared and the badge never disappeared.
+      //
+      // Shadowrocket / Loon hide it by declaring a split route set instead:
+      // 0.0.0.0/1 + 128.0.0.0/1 still covers every IPv4 address but contains
+      // no default route. Keep the 0.0.0.0/31 runtime exclusion too -- it is
+      // reserved/unroutable, so no real traffic is diverted, and it keeps the
+      // route set split even if the system normalizes the two /1 routes.
+      ipv4Settings.includedRoutes = ipv4Routes.isEmpty
+        ? [
+          NEIPv4Route(
+            destinationAddress: "0.0.0.0",
+            subnetMask: "128.0.0.0"
+          ),
+          NEIPv4Route(
+            destinationAddress: "128.0.0.0",
+            subnetMask: "128.0.0.0"
+          ),
+        ]
+        : ipv4Routes
       ipv4Settings.excludedRoutes = [
         NEIPv4Route(
           destinationAddress: "0.0.0.0",
           subnetMask: "255.255.255.254"
         )
       ]
+    } else {
+      ipv4Settings.includedRoutes = ipv4Routes.isEmpty
+        ? [.default()]
+        : ipv4Routes
     }
     settings.ipv4Settings = ipv4Settings
 
@@ -82,17 +99,31 @@ final class PacketTunnelNetworkConfiguration {
         )
       }
       ipv6RouteCount = ipv6Routes.count
-      ipv6Settings.includedRoutes = ipv6Routes.isEmpty
-        ? [.default()]
-        : ipv6Routes
       if hideVpnIcon {
-        // IPv6 counterpart of the /31 exclusion above.
+        // IPv6 counterpart of the split route set above: ::/1 + 8000::/1
+        // cover the whole v6 space without declaring a literal default route.
+        ipv6Settings.includedRoutes = ipv6Routes.isEmpty
+          ? [
+            NEIPv6Route(
+              destinationAddress: "::",
+              networkPrefixLength: NSNumber(value: 1)
+            ),
+            NEIPv6Route(
+              destinationAddress: "8000::",
+              networkPrefixLength: NSNumber(value: 1)
+            ),
+          ]
+          : ipv6Routes
         ipv6Settings.excludedRoutes = [
           NEIPv6Route(
             destinationAddress: "::",
             networkPrefixLength: NSNumber(value: 127)
           )
         ]
+      } else {
+        ipv6Settings.includedRoutes = ipv6Routes.isEmpty
+          ? [.default()]
+          : ipv6Routes
       }
       settings.ipv6Settings = ipv6Settings
     }
