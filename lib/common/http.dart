@@ -41,7 +41,9 @@ class FlClashHttpOverrides extends HttpOverrides {
       return 'DIRECT';
     }
     final isStart = read(isStartProvider);
-    final suspend = read(suspendProvider);
+    // On iOS the tunnel lives in the network extension; pausing the app's
+    // listener here only desyncs the UI and the HTTP proxy from a live VPN.
+    final suspend = system.isIOS ? false : read(suspendProvider);
     if (!isStart || suspend) return 'DIRECT';
     final mixedPort = read(
       patchClashConfigProvider.select((state) => state.mixedPort),

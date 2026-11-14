@@ -3,8 +3,42 @@ import 'dart:io';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:path_provider_foundation/path_provider_foundation.dart';
+
+/// The tunnel extension reads its home directory from the App Group container,
+/// not from the app sandbox, so every file the two processes share — config,
+/// geo data, profiles, providers — has to live in that container on iOS.
+@visibleForTesting
+Future<Directory> migrateIOSDataDirectory({
+  required Directory supportDirectory,
+  required String appGroupPath,
+}) async {
+  if (appGroupPath.isEmpty) {
+    return supportDirectory;
+  }
+  final appGroupDirectory = Directory(appGroupPath);
+  await appGroupDirectory.create(recursive: true);
+  if (!await supportDirectory.exists() ||
+      equals(supportDirectory.path, appGroupDirectory.path)) {
+    return appGroupDirectory;
+  }
+  await for (final entity in supportDirectory.list(recursive: true)) {
+    final targetPath = join(
+      appGroupDirectory.path,
+      relative(entity.path, from: supportDirectory.path),
+    );
+    if (entity is Directory) {
+      await Directory(targetPath).create(recursive: true);
+    } else if (entity is File && !await File(targetPath).exists()) {
+      await File(targetPath).parent.create(recursive: true);
+      await entity.copy(targetPath);
+    }
+  }
+  return appGroupDirectory;
+}
 
 class AppPath {
   static AppPath? _instance;
@@ -41,10 +75,34 @@ class AppPath {
   }
 
   void _bind() {
-    _dataDir = ResolveOnce(supportDirectory);
+    _dataDir = ResolveOnce(_resolveDataDir);
     _downloadDir = ResolveOnce(downloadDirectory);
     _tempDir = ResolveOnce(temporaryDirectory);
     cacheDirectory().then(cacheDir.complete);
+  }
+
+  Future<Directory> _resolveDataDir() async {
+    final supportDir = await supportDirectory();
+    if (!system.isIOS) {
+      return supportDir;
+    }
+    // Match PacketTunnelSharedStateStore.makeInitParams(): the extension sets
+    // Go's home-dir to the App Group container. Writing config.yaml or the geo
+    // assets to the app sandbox leaves the extension unable to start the core.
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final appGroupPath =
+          await PathProviderFoundation().getContainerPath(
+            appGroupIdentifier: 'group.${packageInfo.packageName}',
+          ) ??
+          '';
+      return await migrateIOSDataDirectory(
+        supportDirectory: supportDir,
+        appGroupPath: appGroupPath,
+      );
+    } catch (_) {
+      return supportDir;
+    }
   }
 
   factory AppPath() {

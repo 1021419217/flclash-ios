@@ -90,13 +90,29 @@ class ApplicationState extends ConsumerState<Application> {
       unawaited(window?.show());
       // Tapping a subscription link is the confirmation, so go straight to the
       // import. A prompt raised while the app is still coming up cannot be
-      // drawn in that first frame; the route it pushes only surfaces as a back
-      // button on the page underneath, and the user has to tap that before the
-      // prompt becomes visible. Skipping the prompt removes the step and the
-      // artefact with it. Import failures still surface through the banner.
+      // drawn in that first frame and only leaves a stray back button behind.
+      // Import failures still surface through the banner.
       await ref
           .read(profilesActionProvider.notifier)
           .addProfileFromLink(url, silence: true);
+      _collapseRootStack();
+    });
+  }
+
+  /// A cold-start URL can become the WidgetsApp initial route, and this app's
+  /// onGenerateRoute answers every name with a HomeRoute. Two HomeRoutes share
+  /// one child: the top one shows a back button, and popping it exposes a blank
+  /// page. Collapse any residue left by the launch once the import has run.
+  void _collapseRootStack([int remaining = 3]) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final navigator = globalState.navigatorKey.currentState;
+      if (navigator == null || !navigator.canPop()) {
+        return;
+      }
+      navigator.popUntil((route) => route.isFirst);
+      if (remaining > 1) {
+        _collapseRootStack(remaining - 1);
+      }
     });
   }
 
@@ -178,10 +194,20 @@ class ApplicationState extends ConsumerState<Application> {
           bannerTopInset: ref.watch(overlayTopOffsetProvider),
           remoteFocus: system.isTV,
           floatingKeyboard: app?.floatingKeyboard,
-          onGenerateRoute: (settings) => HomeRoute(
-            settings: settings,
-            builder: (_) => KeyboardInsetHold(child: child!),
-          ),
+          onGenerateRoute: (settings) {
+            // Only '/' owns the root page. A subscription URL delivered on a
+            // cold start is not a route: answering it with a second HomeRoute
+            // is what produced the stray back button and the blank page behind
+            // it. Let Navigator fall back to '/' instead.
+            if (settings.name != null &&
+                settings.name != Navigator.defaultRouteName) {
+              return null;
+            }
+            return HomeRoute(
+              settings: settings,
+              builder: (_) => KeyboardInsetHold(child: child!),
+            );
+          },
         );
       },
       child: const HomePage(),

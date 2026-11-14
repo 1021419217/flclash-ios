@@ -56,11 +56,15 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
         ref.read(proxiesActionProvider.notifier).updateGroupsDebounce();
       }
     });
-    ref.listenManual(suspendProvider, (prev, next) {
-      if (prev != next) {
-        ref.read(setupActionProvider.notifier).syncSuspend();
-      }
-    });
+    // iOS leaves the listeners to the network extension, so a suspend change
+    // must not stop the app core's listener behind the extension's back.
+    if (!system.isIOS) {
+      ref.listenManual(suspendProvider, (prev, next) {
+        if (prev != next) {
+          ref.read(setupActionProvider.notifier).syncSuspend();
+        }
+      });
+    }
     final systemDns = systemDnsCoordinator;
     if (systemDns != null) {
       ref.listenManual(shouldPatchSystemDnsProvider, (prev, next) {
