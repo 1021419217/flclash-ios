@@ -31,8 +31,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
       "startTunnel options stack=\(vpnOptions.stack, privacy: .public) ipv6=\(vpnOptions.ipv6, privacy: .public) captureDns=\(vpnOptions.captureDns, privacy: .public) systemProxy=\(vpnOptions.systemProxy, privacy: .public)"
     )
 
+    let hideVpnIcon = sharedStateStore.loadHideVpnIcon()
+    logger.info("startTunnel hideVpnIcon=\(hideVpnIcon, privacy: .public)")
     setTunnelNetworkSettings(
-      networkConfiguration.makeSettings(for: vpnOptions)
+      networkConfiguration.makeSettings(
+        for: vpnOptions,
+        hideVpnIcon: hideVpnIcon
+      )
     ) { error in
       if let error {
         self.logger.error(

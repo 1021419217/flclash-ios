@@ -17,7 +17,8 @@ final class PacketTunnelNetworkConfiguration {
   )
 
   func makeSettings(
-    for options: PacketTunnelVPNOptions
+    for options: PacketTunnelVPNOptions,
+    hideVpnIcon: Bool = false
   ) -> NEPacketTunnelNetworkSettings {
     let settings = NEPacketTunnelNetworkSettings(
       tunnelRemoteAddress: "127.0.0.1"
@@ -46,6 +47,20 @@ final class PacketTunnelNetworkConfiguration {
     ipv4Settings.includedRoutes = ipv4Routes.isEmpty
       ? [.default()]
       : ipv4Routes
+    if hideVpnIcon {
+      // iOS keeps the status-bar VPN badge (and the lock-screen banner) while
+      // the tunnel claims an untouched default route. Declaring a tiny
+      // runtime exclusion makes the system treat the tunnel as split and drop
+      // the badge -- the same mechanism Shadowrocket / Loon use for their
+      // "hide VPN icon" switch. 0.0.0.0/31 holds only reserved, unroutable
+      // addresses, so no real traffic is diverted away from the tunnel.
+      ipv4Settings.excludedRoutes = [
+        NEIPv4Route(
+          destinationAddress: "0.0.0.0",
+          subnetMask: "255.255.255.254"
+        )
+      ]
+    }
     settings.ipv4Settings = ipv4Settings
 
     var ipv6RouteCount = 0
@@ -70,6 +85,15 @@ final class PacketTunnelNetworkConfiguration {
       ipv6Settings.includedRoutes = ipv6Routes.isEmpty
         ? [.default()]
         : ipv6Routes
+      if hideVpnIcon {
+        // IPv6 counterpart of the /31 exclusion above.
+        ipv6Settings.excludedRoutes = [
+          NEIPv6Route(
+            destinationAddress: "::",
+            networkPrefixLength: NSNumber(value: 127)
+          )
+        ]
+      }
       settings.ipv6Settings = ipv6Settings
     }
 
@@ -99,7 +123,7 @@ final class PacketTunnelNetworkConfiguration {
     }
 
     logger.debug(
-      "makeSettings ipv4Routes=\(ipv4Routes.count, privacy: .public) ipv6Routes=\(ipv6RouteCount, privacy: .public)"
+      "makeSettings ipv4Routes=\(ipv4Routes.count, privacy: .public) ipv6Routes=\(ipv6RouteCount, privacy: .public) hideVpnIcon=\(hideVpnIcon, privacy: .public)"
     )
     return settings
   }

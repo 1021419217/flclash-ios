@@ -75,6 +75,20 @@ class Preferences {
     await preferences?.setBool('alwaysOn', value);
   }
 
+  /// Hide the iOS status-bar VPN badge. The tunnel still carries all traffic;
+  /// we only declare 0.0.0.0/1 + 128.0.0.0/1 instead of a single default
+  /// route so iOS no longer shows the "VPN" indicator (and its lock-screen
+  /// banner). Takes effect on the next connection, like the on-demand rules.
+  Future<bool> getHideVpnIcon() async {
+    final preferences = await _store.value;
+    return preferences?.getBool('hideVpnIcon') ?? false;
+  }
+
+  Future<void> setHideVpnIcon(bool value) async {
+    final preferences = await _store.value;
+    await preferences?.setBool('hideVpnIcon', value);
+  }
+
   /// The md5 of the config.yaml the Core last accepted, which is also what
   /// the Android service applies when it starts without Flutter.
   Future<String?> getAppliedConfigMd5() async {

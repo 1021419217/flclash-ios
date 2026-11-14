@@ -39,11 +39,13 @@ class _OnDemandViewState extends ConsumerState<OnDemandView>
   bool get _needsLocationPermission => _isAndroid || _isMacOS || _isWindows;
 
   bool _alwaysOn = false;
+  bool _hideVpnIcon = false;
 
   @override
   void initState() {
     super.initState();
     unawaited(_loadAlwaysOn());
+    unawaited(_loadHideVpnIcon());
   }
 
   Future<void> _loadAlwaysOn() async {
@@ -52,9 +54,16 @@ class _OnDemandViewState extends ConsumerState<OnDemandView>
     setState(() => _alwaysOn = value);
   }
 
+  Future<void> _loadHideVpnIcon() async {
+    final value = await preferences.getHideVpnIcon();
+    if (!mounted) return;
+    setState(() => _hideVpnIcon = value);
+  }
+
   /// Push the current on-demand settings to the Network Extension. Swift
   /// rebuilds NEOnDemandRuleConnect / NEOnDemandRuleDisconnect as soon as the
-  /// shared state is saved, so one sync is enough for both switches.
+  /// shared state is saved, and the tunnel reads hideVpnIcon the next time it
+  /// builds its network settings, so one sync covers every switch here.
   void _syncOnDemand() {
     service?.syncState(
       globalState.container.read(sharedStateProvider),
@@ -62,9 +71,27 @@ class _OnDemandViewState extends ConsumerState<OnDemandView>
     );
   }
 
+  // Persist before syncing: syncState reads the value back from
+  // SharedPreferences, so firing both concurrently can push a stale value.
   void _handleAlwaysOnChanged(bool value) {
     setState(() => _alwaysOn = value);
-    unawaited(preferences.setAlwaysOn(value));
+    unawaited(_persistAlwaysOn(value));
+  }
+
+  Future<void> _persistAlwaysOn(bool value) async {
+    await preferences.setAlwaysOn(value);
+    if (!mounted) return;
+    _syncOnDemand();
+  }
+
+  void _handleHideVpnIconChanged(bool value) {
+    setState(() => _hideVpnIcon = value);
+    unawaited(_persistHideVpnIcon(value));
+  }
+
+  Future<void> _persistHideVpnIcon(bool value) async {
+    await preferences.setHideVpnIcon(value);
+    if (!mounted) return;
     _syncOnDemand();
   }
 
@@ -428,9 +455,16 @@ class _OnDemandViewState extends ConsumerState<OnDemandView>
                       value: _alwaysOn,
                       onChanged: _handleAlwaysOnChanged,
                     ),
+                    ListItem.toggle(
+                      title: const Text('隐藏 VPN 图标'),
+                      subtitle: const Text('隐藏状态栏 VPN 标识与锁屏横幅'),
+                      value: _hideVpnIcon,
+                      onChanged: _handleHideVpnIconChanged,
+                    ),
                   ],
                   footer:
-                      '开启后 VPN 会随网络变化自动重连；下方 WiFi 列表中的网络将自动断开 VPN。',
+                      '「始终连接」开启后 VPN 会随网络变化自动重连；下方 WiFi 列表中的网络将自动断开 VPN。'
+                      '「隐藏 VPN 图标」不影响代理流量，在下次连接 VPN 时生效。',
                 ),
               ),
             ),

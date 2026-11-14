@@ -143,10 +143,10 @@ class Service {
     return await methodChannel.invokeMethod<String>('init') ?? '';
   }
 
-  /// The iOS Network Extension owns the on-demand rules. Swift reads
-  /// `alwaysOn` / `excludeSSIDs` from this very payload and rebuilds
-  /// NEOnDemandRuleConnect / NEOnDemandRuleDisconnect right after saving it,
-  /// so the two keys must travel with every sync. Injecting them here at the
+  /// The iOS Network Extension owns the on-demand rules and reads the
+  /// `hideVpnIcon` switch when it builds its tunnel network settings. Swift
+  /// reads `alwaysOn` / `excludeSSIDs` / `hideVpnIcon` from this very payload,
+  /// so these keys must travel with every sync. Injecting them here at the
   /// channel boundary keeps the generated freezed models untouched.
   Future<String> syncState(
     SharedState state, {
@@ -157,6 +157,7 @@ class Service {
     );
     payload['alwaysOn'] = await preferences.getAlwaysOn();
     payload['excludeSSIDs'] = excludeSSIDs;
+    payload['hideVpnIcon'] = await preferences.getHideVpnIcon();
     return await methodChannel.invokeMethod<String>(
           'syncState',
           json.encode(payload),

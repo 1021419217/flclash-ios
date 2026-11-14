@@ -31,6 +31,20 @@ final class PacketTunnelSharedStateStore {
     return (options, data)
   }
 
+  /// The "hide VPN icon" switch is a top-level key of the shared state (next
+  /// to alwaysOn / excludeSSIDs), deliberately kept out of vpnOptions so the
+  /// saved active-options snapshot stays a faithful copy of the Dart model.
+  /// The tunnel reads it once when it builds its network settings.
+  func loadHideVpnIcon() -> Bool {
+    guard let sharedData = userDefaults?.data(forKey: sharedStateKey),
+      let shared = try? JSONSerialization.jsonObject(with: sharedData)
+        as? [String: Any]
+    else {
+      return false
+    }
+    return shared["hideVpnIcon"] as? Bool ?? false
+  }
+
   func loadSetupParams() -> Data {
     guard let userDefaults else {
       return Self.emptySetupParams
